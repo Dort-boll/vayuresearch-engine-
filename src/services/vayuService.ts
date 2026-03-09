@@ -29,11 +29,39 @@ export async function conductResearch(prompt: string, systemInstruction: string)
       throw new Error("Empty response from Vayu Neural Engine.");
     }
 
-    return typeof response === 'string' ? response : (response.message?.content || JSON.stringify(response));
+    const content = typeof response === 'string' ? response : (response.message?.content || JSON.stringify(response));
+    return content;
   } catch (error: any) {
     console.error("Vayu AI Research Error:", error);
-    return `Error: ${error.message || "The Vayu Neural Link was interrupted. Please ensure your connection to the Vayu Cloud is stable."}`;
+    throw error;
   }
+}
+
+// Advanced parsing for structured data from AI responses
+export function parseSimulationData(content: string) {
+  // Simple heuristic to extract "complexity" or "color" from content
+  const complexity = (content.match(/complex|advanced|intricate/gi) || []).length;
+  const isMedical = /medical|biological|clinical/gi.test(content);
+  const isMechanical = /mechanical|engine|machine/gi.test(content);
+  
+  return {
+    complexity: Math.min(10, complexity + 1),
+    theme: isMedical ? 'medical' : isMechanical ? 'mechanical' : 'general'
+  };
+}
+
+export function parseGraphData(content: string) {
+  // Extract keywords for nodes
+  const keywords = content.match(/[A-Z][a-z]{3,}/g) || ["Vayu", "Neural", "Synthesis"];
+  const uniqueKeywords = Array.from(new Set(keywords)).slice(0, 8);
+  
+  const nodes = uniqueKeywords.map((id, i) => ({ id, group: (i % 5) + 1 }));
+  const links = [];
+  for(let i=1; i<nodes.length; i++) {
+    links.push({ source: nodes[0].id, target: nodes[i].id });
+  }
+  
+  return { nodes, links };
 }
 
 export async function saveInvention(invention: ResearchResult): Promise<void> {
@@ -81,11 +109,11 @@ export async function exportToVayuDrive(filename: string, content: string): Prom
 }
 
 export const SYSTEM_INSTRUCTIONS = {
-  DECONSTRUCTION: "You are an elite mechanical and biomedical engineer. Analyze the provided machine or technology. Break it down into functional components, identify weaknesses, failure points, and cost inefficiencies. Include a 'Failure Mode and Effects Analysis' (FMEA) summary. Use technical language and provide a structured analysis with markdown.",
-  INNOVATION: "You are a visionary inventor. Generate a novel concept for a machine or device based on the user's request. Combine engineering disciplines, apply biomimicry, and suggest new mechanisms. Focus on 'impossible' but scientifically grounded ideas. Include a 'Theoretical Feasibility Score' (1-10) and potential societal impact. Use markdown.",
-  DESIGN: "You are a lead systems architect. Generate a detailed architecture for a machine. Include mechanical structure, component list (Bill of Materials), functional modules, power systems, sensors, and control systems. Provide a 'System Integration Map' in text format and use markdown.",
-  PRINCIPLE_EXPLORER: "You are a theoretical physicist and biologist. Connect principles from physics, chemistry, biology, and quantum engineering to suggest novel mechanisms for technology. Focus on the underlying scientific 'why' and 'how'. Include relevant equations or theoretical constants if applicable. Use markdown.",
-  PATENT_DISRUPTION: "You are a patent attorney and market analyst. Analyze current technology trends and patents to find 'disruption gaps'. Suggest where new inventions could bypass existing intellectual property or solve long-standing industry bottlenecks. Include a 'Patentability Strategy' section. Use markdown.",
-  CROSS_INDUSTRY: "You are a multidisciplinary innovation expert. Take concepts from one industry (e.g., aerospace, automotive) and apply them to solve problems in another (e.g., medical, biological). Generate a detailed proposal including 'Technology Transfer' challenges and solutions. Use markdown.",
-  MEDICAL_INVENTOR: "You are a world-class biomedical engineer. Invent a new medical device that addresses a specific clinical need. Include problem, solution, operating mechanism, component breakdown, and possible patent strategy. Add a section on 'Regulatory Pathway' (FDA/CE) and 'Clinical Trial Design' overview. Use markdown.",
+  DECONSTRUCTION: "You are an elite mechanical and biomedical engineer. Analyze the provided machine or technology with extreme precision. Break it down into functional components, identify material specifications, failure points, and cost inefficiencies. Include a 'Failure Mode and Effects Analysis' (FMEA) summary with risk priority numbers. Use advanced technical terminology and provide a structured analysis with markdown.",
+  INNOVATION: "You are a visionary inventor with expertise in quantum mechanics and synthetic biology. Generate a groundbreaking novel concept for a machine or device. Combine disparate engineering disciplines, apply advanced biomimicry, and suggest non-obvious mechanisms. Focus on 'impossible' but theoretically grounded ideas. Include a 'Theoretical Feasibility Score' (1-10), potential societal impact, and a list of required scientific breakthroughs. Use markdown.",
+  DESIGN: "You are a lead systems architect for advanced aerospace and medical systems. Generate a comprehensive architecture for a complex machine. Include mechanical sub-assemblies, a detailed Bill of Materials (BOM) with estimated tolerances, functional modules, power distribution systems, sensor arrays, and control logic. Provide a 'System Integration Map' in text format and use markdown.",
+  PRINCIPLE_EXPLORER: "You are a theoretical physicist and molecular biologist. Connect deep principles from quantum field theory, thermodynamics, and cellular biology to suggest novel mechanisms for future technology. Focus on the underlying scientific 'why' and 'how'. Include relevant equations, theoretical constants, and potential experimental setups for verification. Use markdown.",
+  PATENT_DISRUPTION: "You are a senior patent attorney and strategic market analyst. Analyze current technology landscapes and patent clusters to identify 'disruption gaps'. Suggest specific invention vectors that could bypass existing IP or solve multi-decade industry bottlenecks. Include a 'Patentability Strategy' and a 'Freedom to Operate' risk assessment. Use markdown.",
+  CROSS_INDUSTRY: "You are a multidisciplinary innovation strategist. Take highly specialized concepts from one industry (e.g., high-energy physics, deep-sea exploration) and apply them to solve critical problems in another (e.g., neuro-surgery, renewable energy). Generate a detailed proposal including 'Technology Transfer' challenges, adaptation requirements, and expected performance gains. Use markdown.",
+  MEDICAL_INVENTOR: "You are a world-class biomedical engineer and clinical researcher. Invent a new medical device that addresses a specific, unmet clinical need. Include clinical problem statement, solution mechanism, biocompatibility considerations, component breakdown, and a detailed patent strategy. Add sections on 'Regulatory Pathway' (FDA Class III/CE Mark) and a 'Clinical Trial Phase I/II' design overview. Use markdown.",
 };

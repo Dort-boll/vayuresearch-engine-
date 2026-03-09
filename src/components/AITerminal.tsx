@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Terminal as TerminalIcon, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { conductResearch } from '../services/vayuService';
+import { cn } from '../lib/utils';
 
 const AITerminal: React.FC = () => {
   const [input, setInput] = useState('');
@@ -26,22 +27,27 @@ const AITerminal: React.FC = () => {
     setInput('');
     setIsProcessing(true);
 
-    let prompt = "";
-    let systemInstruction = "You are an AI research terminal. Respond concisely to commands.";
+    try {
+      let prompt = "";
+      let systemInstruction = "You are an AI research terminal. Respond concisely to commands.";
 
-    if (cmd.startsWith('invent:')) {
-      prompt = `Invent a new machine for: ${cmd.replace('invent:', '').trim()}`;
-      systemInstruction = "You are a visionary inventor. Provide a concise but brilliant invention concept.";
-    } else if (cmd.startsWith('analyze:')) {
-      prompt = `Analyze the following technology: ${cmd.replace('analyze:', '').trim()}`;
-      systemInstruction = "You are a technical analyst. Provide a brief functional breakdown and weakness report.";
-    } else {
-      prompt = cmd;
+      if (cmd.startsWith('invent:')) {
+        prompt = `Invent a new machine for: ${cmd.replace('invent:', '').trim()}`;
+        systemInstruction = "You are a visionary inventor. Provide a concise but brilliant invention concept.";
+      } else if (cmd.startsWith('analyze:')) {
+        prompt = `Analyze the following technology: ${cmd.replace('analyze:', '').trim()}`;
+        systemInstruction = "You are a technical analyst. Provide a brief functional breakdown and weakness report.";
+      } else {
+        prompt = cmd;
+      }
+
+      const response = await conductResearch(prompt, systemInstruction);
+      setHistory(prev => [...prev, { type: 'ai', content: response }]);
+    } catch (error: any) {
+      setHistory(prev => [...prev, { type: 'ai', content: `Error: ${error.message || "Neural link failed."}` }]);
+    } finally {
+      setIsProcessing(false);
     }
-
-    const response = await conductResearch(prompt, systemInstruction);
-    setHistory(prev => [...prev, { type: 'ai', content: response }]);
-    setIsProcessing(false);
   };
 
   return (
@@ -66,7 +72,7 @@ const AITerminal: React.FC = () => {
               )}
             >
               <div className="text-[10px] uppercase opacity-50 mb-1">
-                {item.type === 'user' ? 'Scientist' : 'NeuroForge AI'}
+                {item.type === 'user' ? 'Scientist' : 'Vayu AI'}
               </div>
               <div className="whitespace-pre-wrap">{item.content}</div>
             </motion.div>
@@ -105,5 +111,4 @@ const AITerminal: React.FC = () => {
   );
 };
 
-import { cn } from '../lib/utils';
 export default AITerminal;

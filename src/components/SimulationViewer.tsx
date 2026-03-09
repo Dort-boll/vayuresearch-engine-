@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { cn } from '../lib/utils';
 
 interface SimulationViewerProps {
   blueprint?: any;
@@ -42,11 +43,15 @@ const SimulationViewer: React.FC<SimulationViewerProps> = ({ blueprint, classNam
     // Neural Core
     const coreGroup = new THREE.Group();
     
+    const complexity = blueprint?.complexity || 1;
+    const theme = blueprint?.theme || 'general';
+    const primaryColor = theme === 'medical' ? 0x0ea5e9 : theme === 'mechanical' ? 0x14b8a6 : 0x8b5cf6;
+
     // Central sphere
-    const coreGeom = new THREE.IcosahedronGeometry(1, 2);
+    const coreGeom = new THREE.IcosahedronGeometry(1, complexity > 5 ? 3 : 2);
     const coreMat = new THREE.MeshPhongMaterial({ 
-      color: 0x0ea5e9, 
-      emissive: 0x0ea5e9,
+      color: primaryColor, 
+      emissive: primaryColor,
       emissiveIntensity: 0.5,
       wireframe: true,
       transparent: true,
@@ -56,20 +61,21 @@ const SimulationViewer: React.FC<SimulationViewerProps> = ({ blueprint, classNam
     coreGroup.add(core);
 
     // Data Rings
-    const ringGeom = new THREE.TorusGeometry(2, 0.02, 16, 100);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x14b8a6, transparent: true, opacity: 0.4 });
-    
-    const ring1 = new THREE.Mesh(ringGeom, ringMat);
-    ring1.rotation.x = Math.PI / 2;
-    coreGroup.add(ring1);
-
-    const ring2 = new THREE.Mesh(ringGeom, ringMat);
-    ring2.rotation.y = Math.PI / 2;
-    coreGroup.add(ring2);
-
-    const ring3 = new THREE.Mesh(ringGeom, ringMat);
-    ring3.rotation.z = Math.PI / 4;
-    coreGroup.add(ring3);
+    const ringCount = Math.min(6, complexity);
+    const rings: THREE.Mesh[] = [];
+    for(let i=0; i<ringCount; i++) {
+      const ringGeom = new THREE.TorusGeometry(2 + (i * 0.2), 0.02, 16, 100);
+      const ringMat = new THREE.MeshBasicMaterial({ 
+        color: i % 2 === 0 ? 0x14b8a6 : 0x8b5cf6, 
+        transparent: true, 
+        opacity: 0.4 
+      });
+      const ring = new THREE.Mesh(ringGeom, ringMat);
+      ring.rotation.x = Math.random() * Math.PI;
+      ring.rotation.y = Math.random() * Math.PI;
+      coreGroup.add(ring);
+      rings.push(ring);
+    }
 
     // Floating particles
     const particlesGeom = new THREE.BufferGeometry();
@@ -94,9 +100,10 @@ const SimulationViewer: React.FC<SimulationViewerProps> = ({ blueprint, classNam
       coreGroup.rotation.y += 0.005;
       coreGroup.rotation.x += 0.002;
       
-      ring1.rotation.z += 0.01;
-      ring2.rotation.x += 0.01;
-      ring3.rotation.y += 0.01;
+      rings.forEach((ring, i) => {
+        ring.rotation.z += 0.01 * (i + 1);
+        ring.rotation.x += 0.005;
+      });
 
       particles.rotation.y += 0.001;
       
@@ -128,5 +135,4 @@ const SimulationViewer: React.FC<SimulationViewerProps> = ({ blueprint, classNam
   return <div ref={containerRef} className={cn("w-full h-full min-h-[400px]", className)} />;
 };
 
-import { cn } from '../lib/utils';
 export default SimulationViewer;

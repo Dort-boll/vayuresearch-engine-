@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
+import { cn } from '../lib/utils';
 
 interface KnowledgeGraphProps {
   data?: any;
@@ -22,7 +23,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, className }) => {
 
     svg.selectAll("*").remove();
 
-    const nodes = [
+    const nodes = data?.nodes || [
       { id: "MRI", group: 1 },
       { id: "Quantum Sensors", group: 2 },
       { id: "Superconductivity", group: 2 },
@@ -33,7 +34,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, className }) => {
       { id: "Neural Interface", group: 5 },
     ];
 
-    const links = [
+    const links = data?.links || [
       { source: "MRI", target: "Quantum Sensors" },
       { source: "MRI", target: "Superconductivity" },
       { source: "Quantum Sensors", target: "Signal Processing" },
@@ -127,5 +128,4 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, className }) => {
   );
 };
 
-import { cn } from '../lib/utils';
 export default KnowledgeGraph;

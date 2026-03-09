@@ -24,7 +24,16 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
-import { conductResearch, SYSTEM_INSTRUCTIONS, saveInvention, getSavedInventions, ResearchResult, exportToVayuDrive } from './services/vayuService';
+import { 
+  conductResearch, 
+  SYSTEM_INSTRUCTIONS, 
+  saveInvention, 
+  getSavedInventions, 
+  ResearchResult, 
+  exportToVayuDrive,
+  parseSimulationData,
+  parseGraphData
+} from './services/vayuService';
 import SimulationViewer from './components/SimulationViewer';
 import KnowledgeGraph from './components/KnowledgeGraph';
 import AITerminal from './components/AITerminal';
@@ -39,8 +48,19 @@ export default function App() {
   const [researchResult, setResearchResult] = useState<string | null>(null);
   const [isResearching, setIsResearching] = useState(false);
   const [savedInventions, setSavedInventions] = useState<ResearchResult[]>([]);
+  const [puterConnected, setPuterConnected] = useState<boolean | null>(null);
+  const [simulationData, setSimulationData] = useState<any>(null);
+  const [graphData, setGraphData] = useState<any>(null);
 
   useEffect(() => {
+    const checkPuter = () => {
+      if (typeof (window as any).puter !== 'undefined') {
+        setPuterConnected(true);
+      } else {
+        setPuterConnected(false);
+      }
+    };
+    checkPuter();
     loadHistory();
   }, []);
 
@@ -53,9 +73,17 @@ export default function App() {
     if (!researchInput.trim()) return;
     setIsResearching(true);
     setResearchResult(null);
-    const result = await conductResearch(researchInput, SYSTEM_INSTRUCTIONS[type]);
-    setResearchResult(result);
-    setIsResearching(false);
+    try {
+      const result = await conductResearch(researchInput, SYSTEM_INSTRUCTIONS[type]);
+      setResearchResult(result);
+      setSimulationData(parseSimulationData(result));
+      setGraphData(parseGraphData(result));
+    } catch (error: any) {
+      alert(`Vayu Neural Error: ${error.message || "Connection interrupted."}`);
+      setResearchResult(`### Vayu Neural Error\n\n${error.message || "The neural link was interrupted. Please ensure your connection to the Vayu Cloud is stable."}`);
+    } finally {
+      setIsResearching(false);
+    }
   };
 
   const handleSave = async () => {
@@ -99,6 +127,20 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen bg-[#050505] text-slate-200 overflow-hidden neural-grid">
+      {/* Connection Banner */}
+      <AnimatePresence>
+        {puterConnected === false && (
+          <motion.div 
+            initial={{ y: -100 }}
+            animate={{ y: 0 }}
+            exit={{ y: -100 }}
+            className="fixed top-0 left-0 right-0 bg-red-500/90 backdrop-blur-md text-white p-2 text-center text-xs font-bold z-[100] border-b border-red-400/50"
+          >
+            VAYU NEURAL LINK OFFLINE: Puter.js failed to initialize. Please refresh or check your connection.
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
       <motion.aside 
         initial={false}
@@ -420,7 +462,7 @@ export default function App() {
               {activeTab === 'simulation' && (
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full">
                   <div className="lg:col-span-3 glass-panel p-0 overflow-hidden relative">
-                    <SimulationViewer />
+                    <SimulationViewer blueprint={simulationData} />
                     <div className="absolute top-4 left-4 glass-card p-3 pointer-events-none">
                       <div className="text-[10px] uppercase opacity-50 mb-1">Simulation Status</div>
                       <div className="text-cyber-teal font-bold">VAYU_ACTIVE</div>
@@ -448,7 +490,7 @@ export default function App() {
               {activeTab === 'graph' && (
                 <div className="h-full flex flex-col gap-6">
                   <div className="flex-1">
-                    <KnowledgeGraph />
+                    <KnowledgeGraph data={graphData} />
                   </div>
                 </div>
               )}
