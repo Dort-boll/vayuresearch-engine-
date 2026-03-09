@@ -60,8 +60,18 @@ const SimulationViewer: React.FC<SimulationViewerProps> = ({ blueprint, classNam
     const core = new THREE.Mesh(coreGeom, coreMat);
     coreGroup.add(core);
 
+    // Inner glowing core
+    const innerCoreGeom = new THREE.SphereGeometry(0.5, 32, 32);
+    const innerCoreMat = new THREE.MeshBasicMaterial({ 
+      color: primaryColor,
+      transparent: true,
+      opacity: 0.3
+    });
+    const innerCore = new THREE.Mesh(innerCoreGeom, innerCoreMat);
+    coreGroup.add(innerCore);
+
     // Data Rings
-    const ringCount = Math.min(6, complexity);
+    const ringCount = Math.min(8, complexity + 2);
     const rings: THREE.Mesh[] = [];
     for(let i=0; i<ringCount; i++) {
       const ringGeom = new THREE.TorusGeometry(2 + (i * 0.2), 0.02, 16, 100);
@@ -95,8 +105,9 @@ const SimulationViewer: React.FC<SimulationViewerProps> = ({ blueprint, classNam
     camera.position.y = 1;
     camera.lookAt(0, 0, 0);
 
+    let animationFrameId: number;
     const animate = () => {
-      requestAnimationFrame(animate);
+      animationFrameId = requestAnimationFrame(animate);
       coreGroup.rotation.y += 0.005;
       coreGroup.rotation.x += 0.002;
       
@@ -125,6 +136,7 @@ const SimulationViewer: React.FC<SimulationViewerProps> = ({ blueprint, classNam
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationFrameId);
       renderer.dispose();
       if (containerRef.current) {
         containerRef.current.removeChild(renderer.domElement);

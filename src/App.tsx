@@ -20,7 +20,10 @@ import {
   Download,
   Stethoscope,
   Globe,
-  Lightbulb
+  Lightbulb,
+  Copy,
+  Trash2,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
@@ -29,6 +32,7 @@ import {
   SYSTEM_INSTRUCTIONS, 
   saveInvention, 
   getSavedInventions, 
+  clearHistory,
   ResearchResult, 
   exportToVayuDrive,
   parseSimulationData,
@@ -37,13 +41,21 @@ import {
 import SimulationViewer from './components/SimulationViewer';
 import KnowledgeGraph from './components/KnowledgeGraph';
 import AITerminal from './components/AITerminal';
+import { ToastContainer, ToastType } from './components/Toast';
 import { cn } from './lib/utils';
 
 type Tab = 'dashboard' | 'lab' | 'designer' | 'simulation' | 'graph' | 'patent' | 'terminal' | 'history';
 
+interface ToastItem {
+  id: string;
+  message: string;
+  type: ToastType;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   const [researchInput, setResearchInput] = useState('');
   const [researchResult, setResearchResult] = useState<string | null>(null);
   const [isResearching, setIsResearching] = useState(false);
@@ -51,6 +63,18 @@ export default function App() {
   const [puterConnected, setPuterConnected] = useState<boolean | null>(null);
   const [simulationData, setSimulationData] = useState<any>(null);
   const [graphData, setGraphData] = useState<any>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [copied, setCopied] = useState(false);
+  const [showResultOnMobile, setShowResultOnMobile] = useState(false);
+
+  const addToast = (message: string, type: ToastType = 'info') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
 
   useEffect(() => {
     const checkPuter = () => {
@@ -62,6 +86,16 @@ export default function App() {
     };
     checkPuter();
     loadHistory();
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth < 1024) setSidebarOpen(false);
+      else setSidebarOpen(true);
+    };
+    
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const loadHistory = async () => {
@@ -70,16 +104,22 @@ export default function App() {
   };
 
   const handleResearch = async (type: keyof typeof SYSTEM_INSTRUCTIONS) => {
-    if (!researchInput.trim()) return;
+    if (!researchInput.trim()) {
+      addToast("Please enter research parameters.", "error");
+      return;
+    }
     setIsResearching(true);
-    setResearchResult(null);
+    // Don't clear researchResult immediately to avoid flicker, 
+    // but we can show a loading overlay
     try {
       const result = await conductResearch(researchInput, SYSTEM_INSTRUCTIONS[type]);
       setResearchResult(result);
       setSimulationData(parseSimulationData(result));
       setGraphData(parseGraphData(result));
+      addToast("Neural synthesis complete.", "success");
+      if (isMobile) setShowResultOnMobile(true);
     } catch (error: any) {
-      alert(`Vayu Neural Error: ${error.message || "Connection interrupted."}`);
+      addToast(`Vayu Neural Error: ${error.message || "Connection interrupted."}`, "error");
       setResearchResult(`### Vayu Neural Error\n\n${error.message || "The neural link was interrupted. Please ensure your connection to the Vayu Cloud is stable."}`);
     } finally {
       setIsResearching(false);
@@ -97,9 +137,9 @@ export default function App() {
       };
       await saveInvention(newInvention);
       await loadHistory();
-      alert("Invention successfully synced to Vayu Cloud.");
+      addToast("Invention successfully synced to Vayu Cloud.", "success");
     } catch (error: any) {
-      alert(`Save Error: ${error.message}`);
+      addToast(`Save Error: ${error.message}`, "error");
     }
   };
 
@@ -108,9 +148,36 @@ export default function App() {
     try {
       const filename = `vayu_research_${Date.now()}.md`;
       await exportToVayuDrive(filename, researchResult);
-      alert(`Research successfully exported to Vayu Drive: ${filename}`);
+      addToast(`Research successfully exported to Vayu Drive: ${filename}`, "success");
     } catch (error: any) {
-      alert(`Export Error: ${error.message}`);
+      addToast(`Export Error: ${error.message}`, "error");
+    }
+  };
+
+  const handleCopy = () => {
+    if (!researchResult) return;
+    navigator.clipboard.writeText(researchResult);
+    setCopied(true);
+    addToast("Copied to clipboard", "success");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleClear = () => {
+    setResearchResult(null);
+    setResearchInput('');
+    setSimulationData(null);
+    setGraphData(null);
+    addToast("Research cleared", "info");
+  };
+
+  const handleClearHistory = async () => {
+    if (!confirm("Are you sure you want to clear all invention history? This cannot be undone.")) return;
+    try {
+      await clearHistory();
+      await loadHistory();
+      addToast("History cleared successfully.", "success");
+    } catch (error: any) {
+      addToast(`Clear Error: ${error.message}`, "error");
     }
   };
 
@@ -126,7 +193,16 @@ export default function App() {
   ];
 
   return (
-    <div className="flex h-screen w-screen bg-[#050505] text-slate-200 overflow-hidden neural-grid">
+    <div className="flex flex-col md:flex-row h-screen w-screen bg-[#050505] text-slate-200 overflow-hidden neural-grid">
+      {/* Toast System */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+
+      {/* Neural Background Animation */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-medical-blue/5 rounded-full blur-[120px] animate-pulse-glow" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-plasma-violet/5 rounded-full blur-[120px] animate-pulse-glow" style={{ animationDelay: '2s' }} />
+      </div>
+
       {/* Connection Banner */}
       <AnimatePresence>
         {puterConnected === false && (
@@ -141,32 +217,48 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
+      {/* Sidebar - Desktop Only */}
       <motion.aside 
         initial={false}
-        animate={{ width: sidebarOpen ? 280 : 80 }}
-        className="glass-panel m-4 mr-0 flex flex-col border-r border-white/10 z-50"
+        animate={{ 
+          width: sidebarOpen ? 280 : 80,
+          x: isMobile ? -300 : 0
+        }}
+        className={cn(
+          "glass-panel m-4 mr-0 flex flex-col border-r border-white/10 z-50 transition-all duration-300",
+          isMobile ? "fixed inset-y-0 left-0 m-0 rounded-none border-r" : "relative"
+        )}
       >
         <div className="p-6 flex items-center justify-between">
-          <div className={cn("flex items-center gap-3 overflow-hidden", !sidebarOpen && "hidden")}>
+          <div className={cn("flex items-center gap-3 overflow-hidden", !sidebarOpen && !isMobile && "hidden")}>
             <div className="w-8 h-8 rounded-lg bg-medical-blue flex items-center justify-center shadow-[0_0_15px_rgba(14,165,233,0.5)]">
               <Zap size={18} className="text-white" />
             </div>
             <span className="font-bold text-lg tracking-tight whitespace-nowrap">Vayu Engine</span>
           </div>
-          <button 
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-          >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+          {!isMobile && (
+            <button 
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            >
+              {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          )}
+          {isMobile && (
+            <button onClick={() => setSidebarOpen(false)} className="p-2">
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         <nav className="flex-1 px-4 space-y-2 overflow-y-auto custom-scrollbar">
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id as Tab)}
+              onClick={() => {
+                setActiveTab(item.id as Tab);
+                if (isMobile) setSidebarOpen(false);
+              }}
               className={cn(
                 "w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-300 group relative",
                 activeTab === item.id 
@@ -175,7 +267,7 @@ export default function App() {
               )}
             >
               <item.icon size={20} className={cn(activeTab === item.id && "text-medical-blue")} />
-              {sidebarOpen && <span className="font-medium">{item.label}</span>}
+              {(sidebarOpen || isMobile) && <span className="font-medium">{item.label}</span>}
               {activeTab === item.id && (
                 <motion.div 
                   layoutId="active-nav"
@@ -187,11 +279,11 @@ export default function App() {
         </nav>
 
         <div className="p-4 mt-auto">
-          <div className={cn("glass-card p-4 flex items-center gap-3", !sidebarOpen && "justify-center")}>
+          <div className={cn("glass-card p-4 flex items-center gap-3", !sidebarOpen && !isMobile && "justify-center")}>
             <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
               <Globe size={18} className="text-cyber-teal" />
             </div>
-            {sidebarOpen && (
+            {(sidebarOpen || isMobile) && (
               <div className="flex flex-col">
                 <span className="text-sm font-bold">Vayu Cloud</span>
                 <span className="text-[10px] text-cyber-teal uppercase tracking-widest">Active</span>
@@ -202,50 +294,51 @@ export default function App() {
       </motion.aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col p-4 overflow-hidden relative">
+      <main className="flex-1 flex flex-col p-2 md:p-4 overflow-hidden relative">
         {/* Header */}
-        <header className="flex items-center justify-between mb-6 px-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">
-              {navItems.find(i => i.id === activeTab)?.label}
-            </h1>
-            <p className="text-sm text-slate-400">Vayu Research Engine v3.0 • Neural Synthesis</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-mono">
-              <span className="w-2 h-2 rounded-full bg-cyber-teal animate-pulse" />
-              VAYU_CORE_ACTIVE
-            </div>
-            <div className="flex gap-2">
+        <header className="flex items-center justify-between mb-4 md:mb-6 px-2 md:px-4">
+          <div className="flex items-center gap-3">
+            {isMobile && (
               <button 
-                onClick={handleExport}
-                disabled={!researchResult}
-                className="p-2 glass-card hover:text-medical-blue transition-colors disabled:opacity-30"
-                title="Export to Vayu Drive"
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 glass-card"
               >
-                <Share2 size={18} />
+                <Menu size={20} />
+              </button>
+            )}
+            <div>
+              <h1 className="text-lg md:text-2xl font-bold tracking-tight text-white">
+                {navItems.find(i => i.id === activeTab)?.label}
+              </h1>
+              <p className="hidden md:block text-sm text-slate-400">Vayu Research Engine v3.0 • Neural Synthesis</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 md:gap-4">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] md:text-xs font-mono">
+              <span className="w-2 h-2 rounded-full bg-cyber-teal animate-pulse" />
+              VAYU_CORE
+            </div>
+            <div className="flex gap-1 md:gap-2">
+              <button 
+                onClick={handleCopy}
+                disabled={!researchResult}
+                className="p-1.5 md:p-2 glass-card hover:text-medical-blue transition-colors disabled:opacity-30"
+              >
+                {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
               </button>
               <button 
-                className="p-2 glass-card hover:text-medical-blue transition-colors"
-                title="Download Report"
-                onClick={() => {
-                  if (!researchResult) return;
-                  const blob = new Blob([researchResult], { type: 'text/markdown' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `vayu_report_${Date.now()}.md`;
-                  a.click();
-                }}
+                onClick={handleClear}
+                disabled={!researchResult && !researchInput}
+                className="p-1.5 md:p-2 glass-card hover:text-red-400 transition-colors disabled:opacity-30"
               >
-                <Download size={18} />
+                <Trash2 size={16} />
               </button>
             </div>
           </div>
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-4">
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-2 md:px-4 pb-20 md:pb-0">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -344,8 +437,34 @@ export default function App() {
               )}
 
               {(activeTab === 'lab' || activeTab === 'designer' || activeTab === 'patent') && (
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-full">
-                  <div className="lg:col-span-2 flex flex-col gap-6">
+                <div className="flex flex-col lg:grid lg:grid-cols-5 gap-6 h-full">
+                  {isMobile && researchResult && (
+                    <div className="flex gap-2 mb-2">
+                      <button 
+                        onClick={() => setShowResultOnMobile(false)}
+                        className={cn(
+                          "flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+                          !showResultOnMobile ? "bg-medical-blue text-white" : "bg-white/5 text-slate-400"
+                        )}
+                      >
+                        Parameters
+                      </button>
+                      <button 
+                        onClick={() => setShowResultOnMobile(true)}
+                        className={cn(
+                          "flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+                          showResultOnMobile ? "bg-medical-blue text-white" : "bg-white/5 text-slate-400"
+                        )}
+                      >
+                        Result
+                      </button>
+                    </div>
+                  )}
+
+                  <div className={cn(
+                    "lg:col-span-2 flex flex-col gap-6",
+                    isMobile && showResultOnMobile && researchResult && "hidden"
+                  )}>
                     <div className="glass-panel p-6">
                       <h3 className="font-bold mb-4">Research Parameters</h3>
                       <textarea
@@ -427,7 +546,10 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="lg:col-span-3 glass-panel p-8 overflow-y-auto relative min-h-[500px]">
+                  <div className={cn(
+                    "lg:col-span-3 glass-panel p-4 md:p-8 overflow-y-auto relative min-h-[400px] md:min-h-[500px]",
+                    isMobile && !showResultOnMobile && researchResult && "hidden"
+                  )}>
                     {researchResult && (
                       <div className="absolute top-4 right-4 z-20">
                         <button 
@@ -503,10 +625,21 @@ export default function App() {
 
               {activeTab === 'history' && (
                 <div className="glass-panel p-8 h-full overflow-y-auto">
-                  <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                    <History className="text-medical-blue" />
-                    Invention History
-                  </h2>
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold flex items-center gap-3">
+                      <History className="text-medical-blue" />
+                      Invention History
+                    </h2>
+                    {savedInventions.length > 0 && (
+                      <button 
+                        onClick={handleClearHistory}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-xs font-bold text-red-400 transition-all"
+                      >
+                        <Trash2 size={14} />
+                        Clear All History
+                      </button>
+                    )}
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {savedInventions.map((inv, i) => (
                       <div key={i} className="glass-card p-6 flex flex-col group">
@@ -543,6 +676,31 @@ export default function App() {
             </motion.div>
           </AnimatePresence>
         </div>
+        {/* Mobile Bottom Navigation */}
+        {isMobile && (
+          <div className="fixed bottom-0 left-0 right-0 h-16 bg-black/80 backdrop-blur-xl border-t border-white/10 flex items-center justify-around px-2 z-[60]">
+            {navItems.slice(0, 5).map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id as Tab)}
+                className={cn(
+                  "flex flex-col items-center gap-1 transition-colors",
+                  activeTab === item.id ? "text-medical-blue" : "text-slate-500"
+                )}
+              >
+                <item.icon size={20} />
+                <span className="text-[10px] font-medium">{item.label.split(' ')[0]}</span>
+              </button>
+            ))}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="flex flex-col items-center gap-1 text-slate-500"
+            >
+              <Menu size={20} />
+              <span className="text-[10px] font-medium">More</span>
+            </button>
+          </div>
+        )}
       </main>
     </div>
   );

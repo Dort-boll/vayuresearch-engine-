@@ -9,12 +9,13 @@ interface KnowledgeGraphProps {
 
 const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, className }) => {
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!svgRef.current) return;
+    if (!svgRef.current || !containerRef.current) return;
 
-    const width = 800;
-    const height = 600;
+    let width = containerRef.current.clientWidth || 800;
+    let height = containerRef.current.clientHeight || 600;
 
     const svg = d3.select(svgRef.current)
       .attr("viewBox", [0, 0, width, height])
@@ -23,65 +24,81 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, className }) => {
 
     svg.selectAll("*").remove();
 
+    // Add a container for zooming
+    const g = svg.append("g");
+
+    // Zoom behavior
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .extent([[0, 0], [width, height]])
+      .scaleExtent([0.1, 8])
+      .on("zoom", (event) => {
+        g.attr("transform", event.transform);
+      });
+
+    svg.call(zoom);
+
     const nodes = data?.nodes || [
-      { id: "MRI", group: 1 },
-      { id: "Quantum Sensors", group: 2 },
-      { id: "Superconductivity", group: 2 },
-      { id: "Signal Processing", group: 3 },
-      { id: "Biomimicry", group: 4 },
-      { id: "Nano-fluidics", group: 4 },
-      { id: "Robotics", group: 5 },
-      { id: "Neural Interface", group: 5 },
+      { id: "MRI", group: 1, val: 15 },
+      { id: "Quantum Sensors", group: 2, val: 10 },
+      { id: "Superconductivity", group: 2, val: 10 },
+      { id: "Signal Processing", group: 3, val: 12 },
+      { id: "Biomimicry", group: 4, val: 8 },
+      { id: "Nano-fluidics", group: 4, val: 8 },
+      { id: "Robotics", group: 5, val: 14 },
+      { id: "Neural Interface", group: 5, val: 14 },
     ];
 
     const links = data?.links || [
-      { source: "MRI", target: "Quantum Sensors" },
-      { source: "MRI", target: "Superconductivity" },
-      { source: "Quantum Sensors", target: "Signal Processing" },
-      { source: "Biomimicry", target: "Robotics" },
-      { source: "Robotics", target: "Neural Interface" },
-      { source: "Neural Interface", target: "Signal Processing" },
+      { source: "MRI", target: "Quantum Sensors", value: 2 },
+      { source: "MRI", target: "Superconductivity", value: 2 },
+      { source: "Quantum Sensors", target: "Signal Processing", value: 1 },
+      { source: "Biomimicry", target: "Robotics", value: 1 },
+      { source: "Robotics", target: "Neural Interface", value: 3 },
+      { source: "Neural Interface", target: "Signal Processing", value: 3 },
     ];
 
     const simulation = d3.forceSimulation(nodes as any)
-      .force("link", d3.forceLink(links).id((d: any) => d.id).distance(100))
-      .force("charge", d3.forceManyBody().strength(-300))
-      .force("center", d3.forceCenter(width / 2, height / 2));
+      .force("link", d3.forceLink(links).id((d: any) => d.id).distance(120))
+      .force("charge", d3.forceManyBody().strength(-400))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("collision", d3.forceCollide().radius(30));
 
-    const link = svg.append("g")
-      .attr("stroke", "rgba(255,255,255,0.1)")
-      .attr("stroke-width", 1.5)
+    const link = g.append("g")
+      .attr("stroke", "rgba(255,255,255,0.15)")
       .selectAll("line")
       .data(links)
-      .join("line");
+      .join("line")
+      .attr("stroke-width", (d: any) => Math.sqrt(d.value || 1) * 1.5);
 
-    const node = svg.append("g")
-      .attr("stroke", "#fff")
-      .attr("stroke-width", 1)
-      .selectAll("circle")
+    const node = g.append("g")
+      .selectAll("g")
       .data(nodes)
-      .join("circle")
-      .attr("r", 8)
-      .attr("fill", (d: any) => {
-        const colors = ["#0ea5e9", "#14b8a6", "#8b5cf6", "#f43f5e", "#eab308"];
-        return colors[d.group - 1] || "#fff";
-      })
+      .join("g")
       .call(d3.drag<any, any>()
         .on("start", dragstarted)
         .on("drag", dragged)
         .on("end", dragended));
 
-    node.append("title").text((d: any) => d.id);
+    node.append("circle")
+      .attr("r", (d: any) => d.val || 10)
+      .attr("fill", (d: any) => {
+        const colors = ["#0ea5e9", "#14b8a6", "#8b5cf6", "#f43f5e", "#eab308", "#10b981"];
+        return colors[d.group - 1] || "#fff";
+      })
+      .attr("stroke", "rgba(255,255,255,0.2)")
+      .attr("stroke-width", 2)
+      .style("filter", "drop-shadow(0 0 5px rgba(255,255,255,0.1))");
 
-    const labels = svg.append("g")
-      .selectAll("text")
-      .data(nodes)
-      .join("text")
+    node.append("text")
       .text((d: any) => d.id)
-      .attr("font-size", "10px")
-      .attr("fill", "rgba(255,255,255,0.7)")
-      .attr("dx", 12)
-      .attr("dy", 4);
+      .attr("font-size", "12px")
+      .attr("font-weight", "500")
+      .attr("fill", "rgba(255,255,255,0.9)")
+      .attr("dx", (d: any) => (d.val || 10) + 5)
+      .attr("dy", 4)
+      .style("pointer-events", "none");
+
+    node.append("title").text((d: any) => d.id);
 
     simulation.on("tick", () => {
       link
@@ -91,12 +108,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, className }) => {
         .attr("y2", (d: any) => d.target.y);
 
       node
-        .attr("cx", (d: any) => d.x)
-        .attr("cy", (d: any) => d.y);
-
-      labels
-        .attr("x", (d: any) => d.x)
-        .attr("y", (d: any) => d.y);
+        .attr("transform", (d: any) => `translate(${d.x},${d.y})`);
     });
 
     function dragstarted(event: any) {
@@ -116,13 +128,23 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data, className }) => {
       event.subject.fy = null;
     }
 
+    const resizeObserver = new ResizeObserver(entries => {
+      if (!entries[0]) return;
+      const { width: newWidth, height: newHeight } = entries[0].contentRect;
+      simulation.force("center", d3.forceCenter(newWidth / 2, newHeight / 2));
+      simulation.alpha(0.3).restart();
+    });
+
+    resizeObserver.observe(containerRef.current);
+
     return () => {
       simulation.stop();
+      resizeObserver.disconnect();
     };
   }, [data]);
 
   return (
-    <div className={cn("w-full h-full min-h-[400px] glass-panel overflow-hidden", className)}>
+    <div ref={containerRef} className={cn("w-full h-full min-h-[400px] glass-panel overflow-hidden", className)}>
       <svg ref={svgRef} className="w-full h-full" />
     </div>
   );

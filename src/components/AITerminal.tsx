@@ -23,6 +23,11 @@ const AITerminal: React.FC = () => {
     if (!input.trim() || isProcessing) return;
 
     const cmd = input.trim();
+    if (cmd.toLowerCase() === 'clear') {
+      setHistory([{ type: 'ai', content: 'Terminal cleared. Ready for neural commands.' }]);
+      setInput('');
+      return;
+    }
     setHistory(prev => [...prev, { type: 'user', content: cmd }]);
     setInput('');
     setIsProcessing(true);

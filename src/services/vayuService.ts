@@ -39,26 +39,62 @@ export async function conductResearch(prompt: string, systemInstruction: string)
 
 // Advanced parsing for structured data from AI responses
 export function parseSimulationData(content: string) {
-  // Simple heuristic to extract "complexity" or "color" from content
-  const complexity = (content.match(/complex|advanced|intricate/gi) || []).length;
-  const isMedical = /medical|biological|clinical/gi.test(content);
-  const isMechanical = /mechanical|engine|machine/gi.test(content);
+  // Try to find a JSON block first
+  const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
+  if (jsonMatch) {
+    try {
+      const data = JSON.parse(jsonMatch[1]);
+      if (data.simulation) return data.simulation;
+    } catch (e) {
+      console.warn("Failed to parse simulation JSON:", e);
+    }
+  }
+
+  // Fallback to heuristic extraction
+  const complexity = (content.match(/complex|advanced|intricate|multi-layered|sophisticated/gi) || []).length;
+  const isMedical = /medical|biological|clinical|biomedical|surgical/gi.test(content);
+  const isMechanical = /mechanical|engine|machine|structural|aerospace/gi.test(content);
   
   return {
-    complexity: Math.min(10, complexity + 1),
-    theme: isMedical ? 'medical' : isMechanical ? 'mechanical' : 'general'
+    complexity: Math.min(15, complexity + 2),
+    theme: isMedical ? 'medical' : isMechanical ? 'mechanical' : 'general',
+    status: 'VAYU_ACTIVE'
   };
 }
 
 export function parseGraphData(content: string) {
-  // Extract keywords for nodes
-  const keywords = content.match(/[A-Z][a-z]{3,}/g) || ["Vayu", "Neural", "Synthesis"];
-  const uniqueKeywords = Array.from(new Set(keywords)).slice(0, 8);
+  // Try to find a JSON block first
+  const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
+  if (jsonMatch) {
+    try {
+      const data = JSON.parse(jsonMatch[1]);
+      if (data.graph) return data.graph;
+    } catch (e) {
+      console.warn("Failed to parse graph JSON:", e);
+    }
+  }
+
+  // Fallback to keyword extraction
+  const keywords = content.match(/[A-Z][a-z]{4,}/g) || ["Vayu", "Neural", "Synthesis", "Engine", "Discovery"];
+  const uniqueKeywords = Array.from(new Set(keywords))
+    .filter(k => !['The', 'This', 'That', 'With', 'From'].includes(k))
+    .slice(0, 12);
   
-  const nodes = uniqueKeywords.map((id, i) => ({ id, group: (i % 5) + 1 }));
+  const nodes = uniqueKeywords.map((id, i) => ({ 
+    id, 
+    group: (i % 6) + 1,
+    val: Math.random() * 10 + 5 
+  }));
+  
   const links = [];
-  for(let i=1; i<nodes.length; i++) {
-    links.push({ source: nodes[0].id, target: nodes[i].id });
+  if (nodes.length > 0) {
+    for(let i=1; i<nodes.length; i++) {
+      links.push({ 
+        source: nodes[Math.floor(Math.random() * i)].id, 
+        target: nodes[i].id,
+        value: Math.random() * 5 + 1
+      });
+    }
   }
   
   return { nodes, links };
@@ -97,6 +133,16 @@ export async function getSavedInventions(): Promise<ResearchResult[]> {
   }
 }
 
+export async function clearHistory(): Promise<void> {
+  try {
+    ensurePuter();
+    await puter.kv.set('vayu_inventions', '[]');
+  } catch (e: any) {
+    console.error("Failed to clear history:", e);
+    throw new Error(`Cloud Clear Failed: ${e.message}`);
+  }
+}
+
 export async function exportToVayuDrive(filename: string, content: string): Promise<void> {
   try {
     ensurePuter();
@@ -109,11 +155,11 @@ export async function exportToVayuDrive(filename: string, content: string): Prom
 }
 
 export const SYSTEM_INSTRUCTIONS = {
-  DECONSTRUCTION: "You are an elite mechanical and biomedical engineer. Analyze the provided machine or technology with extreme precision. Break it down into functional components, identify material specifications, failure points, and cost inefficiencies. Include a 'Failure Mode and Effects Analysis' (FMEA) summary with risk priority numbers. Use advanced technical terminology and provide a structured analysis with markdown.",
-  INNOVATION: "You are a visionary inventor with expertise in quantum mechanics and synthetic biology. Generate a groundbreaking novel concept for a machine or device. Combine disparate engineering disciplines, apply advanced biomimicry, and suggest non-obvious mechanisms. Focus on 'impossible' but theoretically grounded ideas. Include a 'Theoretical Feasibility Score' (1-10), potential societal impact, and a list of required scientific breakthroughs. Use markdown.",
-  DESIGN: "You are a lead systems architect for advanced aerospace and medical systems. Generate a comprehensive architecture for a complex machine. Include mechanical sub-assemblies, a detailed Bill of Materials (BOM) with estimated tolerances, functional modules, power distribution systems, sensor arrays, and control logic. Provide a 'System Integration Map' in text format and use markdown.",
-  PRINCIPLE_EXPLORER: "You are a theoretical physicist and molecular biologist. Connect deep principles from quantum field theory, thermodynamics, and cellular biology to suggest novel mechanisms for future technology. Focus on the underlying scientific 'why' and 'how'. Include relevant equations, theoretical constants, and potential experimental setups for verification. Use markdown.",
-  PATENT_DISRUPTION: "You are a senior patent attorney and strategic market analyst. Analyze current technology landscapes and patent clusters to identify 'disruption gaps'. Suggest specific invention vectors that could bypass existing IP or solve multi-decade industry bottlenecks. Include a 'Patentability Strategy' and a 'Freedom to Operate' risk assessment. Use markdown.",
-  CROSS_INDUSTRY: "You are a multidisciplinary innovation strategist. Take highly specialized concepts from one industry (e.g., high-energy physics, deep-sea exploration) and apply them to solve critical problems in another (e.g., neuro-surgery, renewable energy). Generate a detailed proposal including 'Technology Transfer' challenges, adaptation requirements, and expected performance gains. Use markdown.",
-  MEDICAL_INVENTOR: "You are a world-class biomedical engineer and clinical researcher. Invent a new medical device that addresses a specific, unmet clinical need. Include clinical problem statement, solution mechanism, biocompatibility considerations, component breakdown, and a detailed patent strategy. Add sections on 'Regulatory Pathway' (FDA Class III/CE Mark) and a 'Clinical Trial Phase I/II' design overview. Use markdown.",
+  DECONSTRUCTION: "You are an elite mechanical and biomedical engineer. Analyze the provided machine or technology with extreme precision. Break it down into functional components, identify material specifications, failure points, and cost inefficiencies. Include a 'Failure Mode and Effects Analysis' (FMEA) summary with risk priority numbers. Use advanced technical terminology and provide a structured analysis with markdown. IMPORTANT: At the end of your response, provide a JSON block enclosed in ```json and ``` with simulation parameters: { \"complexity\": 1-10, \"theme\": \"medical\" | \"mechanical\" | \"general\", \"nodes\": [{\"id\": \"string\", \"group\": 1-6, \"val\": 5-20}], \"links\": [{\"source\": \"string\", \"target\": \"string\", \"value\": 1-5}] }",
+  INNOVATION: "You are a visionary inventor with expertise in quantum mechanics and synthetic biology. Generate a groundbreaking novel concept for a machine or device. Combine disparate engineering disciplines, apply advanced biomimicry, and suggest non-obvious mechanisms. Focus on 'impossible' but theoretically grounded ideas. Include a 'Theoretical Feasibility Score' (1-10), potential societal impact, and a list of required scientific breakthroughs. Use markdown. IMPORTANT: At the end of your response, provide a JSON block enclosed in ```json and ``` with simulation parameters: { \"complexity\": 1-10, \"theme\": \"medical\" | \"mechanical\" | \"general\", \"nodes\": [{\"id\": \"string\", \"group\": 1-6, \"val\": 5-20}], \"links\": [{\"source\": \"string\", \"target\": \"string\", \"value\": 1-5}] }",
+  DESIGN: "You are a lead systems architect for advanced aerospace and medical systems. Generate a comprehensive architecture for a complex machine. Include mechanical sub-assemblies, a detailed Bill of Materials (BOM) with estimated tolerances, functional modules, power distribution systems, sensor arrays, and control logic. Provide a 'System Integration Map' in text format and use markdown. IMPORTANT: At the end of your response, provide a JSON block enclosed in ```json and ``` with simulation parameters: { \"complexity\": 1-10, \"theme\": \"medical\" | \"mechanical\" | \"general\", \"nodes\": [{\"id\": \"string\", \"group\": 1-6, \"val\": 5-20}], \"links\": [{\"source\": \"string\", \"target\": \"string\", \"value\": 1-5}] }",
+  PRINCIPLE_EXPLORER: "You are a theoretical physicist and molecular biologist. Connect deep principles from quantum field theory, thermodynamics, and cellular biology to suggest novel mechanisms for future technology. Focus on the underlying scientific 'why' and 'how'. Include relevant equations, theoretical constants, and potential experimental setups for verification. Use markdown. IMPORTANT: At the end of your response, provide a JSON block enclosed in ```json and ``` with simulation parameters: { \"complexity\": 1-10, \"theme\": \"medical\" | \"mechanical\" | \"general\", \"nodes\": [{\"id\": \"string\", \"group\": 1-6, \"val\": 5-20}], \"links\": [{\"source\": \"string\", \"target\": \"string\", \"value\": 1-5}] }",
+  PATENT_DISRUPTION: "You are a senior patent attorney and strategic market analyst. Analyze current technology landscapes and patent clusters to identify 'disruption gaps'. Suggest specific invention vectors that could bypass existing IP or solve multi-decade industry bottlenecks. Include a 'Patentability Strategy' and a 'Freedom to Operate' risk assessment. Use markdown. IMPORTANT: At the end of your response, provide a JSON block enclosed in ```json and ``` with simulation parameters: { \"complexity\": 1-10, \"theme\": \"medical\" | \"mechanical\" | \"general\", \"nodes\": [{\"id\": \"string\", \"group\": 1-6, \"val\": 5-20}], \"links\": [{\"source\": \"string\", \"target\": \"string\", \"value\": 1-5}] }",
+  CROSS_INDUSTRY: "You are a multidisciplinary innovation strategist. Take highly specialized concepts from one industry (e.g., high-energy physics, deep-sea exploration) and apply them to solve critical problems in another (e.g., neuro-surgery, renewable energy). Generate a detailed proposal including 'Technology Transfer' challenges, adaptation requirements, and expected performance gains. Use markdown. IMPORTANT: At the end of your response, provide a JSON block enclosed in ```json and ``` with simulation parameters: { \"complexity\": 1-10, \"theme\": \"medical\" | \"mechanical\" | \"general\", \"nodes\": [{\"id\": \"string\", \"group\": 1-6, \"val\": 5-20}], \"links\": [{\"source\": \"string\", \"target\": \"string\", \"value\": 1-5}] }",
+  MEDICAL_INVENTOR: "You are a world-class biomedical engineer and clinical researcher. Invent a new medical device that addresses a specific, unmet clinical need. Include clinical problem statement, solution mechanism, biocompatibility considerations, component breakdown, and a detailed patent strategy. Add sections on 'Regulatory Pathway' (FDA Class III/CE Mark) and a 'Clinical Trial Phase I/II' design overview. Use markdown. IMPORTANT: At the end of your response, provide a JSON block enclosed in ```json and ``` with simulation parameters: { \"complexity\": 1-10, \"theme\": \"medical\" | \"mechanical\" | \"general\", \"nodes\": [{\"id\": \"string\", \"group\": 1-6, \"val\": 5-20}], \"links\": [{\"source\": \"string\", \"target\": \"string\", \"value\": 1-5}] }",
 };
